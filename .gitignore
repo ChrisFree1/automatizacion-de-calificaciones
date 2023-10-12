@@ -1,5 +1,7 @@
+# Excluir carpetas
 build/
-
 dist/
-
 myenv/
+
+# Excluir archivos específicos
+app.spec
