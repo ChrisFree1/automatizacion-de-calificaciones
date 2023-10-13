@@ -10,6 +10,8 @@ nombres_institucional = []
 columnas_calificaciones_profesora = ["Primer Parcial", "Segundo Parcial", "Nota Final"]
 columnas_calificaciones_institucional = []
 
+ubicacion_archivo_institucional = ""
+
 # Definir df_institucional y df_profesora como variables globales
 df_institucional = pd.DataFrame()
 df_profesora = pd.DataFrame()
@@ -42,7 +44,8 @@ def cargar_archivo_profesora():
         archivos_cargados = True
 
 def cargar_archivo_institucional():
-    global nombres_institucional, columnas_calificaciones_institucional, df_institucional, archivos_cargados
+    global nombres_institucional, columnas_calificaciones_institucional, df_institucional, archivos_cargados, ubicacion_archivo_institucional
+
     if not archivos_cargados:
         messagebox.showerror("Error", "Cargue primero el archivo de la profesora.")
         return
@@ -54,7 +57,7 @@ def cargar_archivo_institucional():
 
     archivo = filedialog.askopenfilename(filetypes=[("Archivos de Excel", "*.xlsx")])
     if archivo:
-        global nombres_institucional, columnas_calificaciones_institucional
+        global nombres_institucional, columnas_calificaciones_institucional, ubicacion_archivo_institucional
         # Leer el archivo Excel institucional y capitalizar los nombres
         df = pd.read_excel(archivo)
         df['Nombre'] = df['Nombre'].apply(capitalizar_nombre)
@@ -63,6 +66,7 @@ def cargar_archivo_institucional():
         df_institucional = df  # Establecer df_institucional como el DataFrame leído
         # Al cargar el archivo institucional, habilitar el botón "Transferir Calificaciones" y verificar las columnas
         columnas_calificaciones_institucional = df.columns
+        ubicacion_archivo_institucional = archivo  # Guardar la ubicación del archivo institucional
         if not list(columnas_calificaciones_profesora) == list(columnas_calificaciones_institucional):
             mensaje_adicional = "Las siguientes columnas de calificaciones no coinciden con el Excel institucional:\n"
             columnas_no_coincidentes = set(columnas_calificaciones_profesora).difference(columnas_calificaciones_institucional)
@@ -85,7 +89,7 @@ def ventana_no_encontrados(mensaje, columnas_no_coincidentes):
 
     # Calcula las coordenadas para centrar la ventana emergente
     x = (ancho_pantalla - 400) // 2  # 400 es el ancho de tu ventana emergente
-    y = (alto_pantalla - 200) // 2   # 200 es la altura de tu ventana emergente
+    y = (alto_pantalla - 300) // 2   # 200 es la altura de tu ventana emergente
 
     # Calcula la altura de la ventana emergente en función del número de columnas no coincidentes
     altura_ventana = max(200, 100 + len(columnas_no_coincidentes) * 20)
@@ -103,7 +107,7 @@ def ventana_no_encontrados(mensaje, columnas_no_coincidentes):
     label.pack(pady=20)
 
 def transferir_calificaciones():
-    global nombres_profesora, nombres_institucional, df_institucional, df_profesora
+    global nombres_profesora, nombres_institucional, df_institucional, df_profesora, ubicacion_archivo_institucional
 
     if not nombres_profesora or not nombres_institucional:
         messagebox.showerror("Error", "Primero cargue los archivos de la profesora y el institucional.")
@@ -144,13 +148,14 @@ def transferir_calificaciones():
         print("Después de actualizar df_institucional:")
         print(df_institucional.head())
 
-        # Guardar el archivo actualizado
-        ubicacion_nuevo_excel = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Archivos Excel", "*.xlsx")])
-        if ubicacion_nuevo_excel:
-            df_institucional.to_excel(ubicacion_nuevo_excel, index=False)
+        # Guardar el archivo actualizado en la ubicación del archivo institucional
+        if ubicacion_archivo_institucional:
+            df_institucional.to_excel(ubicacion_archivo_institucional, index=False)
             mensaje_exitoso = "Las calificaciones han sido transferidas exitosamente."
             messagebox.showinfo("Transferencia Exitosa", mensaje_exitoso)
             deshabilitar_botones()
+
+
 
 
 
