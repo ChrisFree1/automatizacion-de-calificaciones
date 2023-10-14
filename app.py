@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import pandas as pd
+import openpyxl
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl import load_workbook
 
 # Variables para almacenar los nombres de estudiantes de ambos archivos
 nombres_profesora = []
@@ -43,12 +46,14 @@ def cargar_archivo_profesora():
         subir_institucional_button["state"] = "normal"
         archivos_cargados = True
 
+
 def cargar_archivo_institucional():
     global nombres_institucional, columnas_calificaciones_institucional, df_institucional, archivos_cargados, ubicacion_archivo_institucional
 
     if not archivos_cargados:
         messagebox.showerror("Error", "Cargue primero el archivo de la profesora.")
         return
+
     mensaje_advertencia = "En el Excel que subió anteriormente, los nombres de sus estudiantes deben estar en el Excel institucional para poder transferir las calificaciones. \nCaso contrario no se procederá a transferir."
     mensaje_adicional = ""
     mensaje_recordatorio = "¡Recuerde! Los nombres de sus estudiantes deben ser los mismos que están en el Excel Institucional."
@@ -58,15 +63,18 @@ def cargar_archivo_institucional():
     archivo = filedialog.askopenfilename(filetypes=[("Archivos de Excel", "*.xlsx")])
     if archivo:
         global nombres_institucional, columnas_calificaciones_institucional, ubicacion_archivo_institucional
-        # Leer el archivo Excel institucional y capitalizar los nombres
-        df = pd.read_excel(archivo)
-        df['Nombre'] = df['Nombre'].apply(capitalizar_nombre)
-        df['Nombre'] = df['Nombre'].apply(lambda nombre: nombre.lower())  # Asegurar que la columna 'Nombre' esté normalizada
-        nombres_institucional = df['Nombre'].tolist()
-        df_institucional = df  # Establecer df_institucional como el DataFrame leído
-        # Al cargar el archivo institucional, habilitar el botón "Transferir Calificaciones" y verificar las columnas
-        columnas_calificaciones_institucional = df.columns
+        nombres_institucional = []  # Restablecer la lista de nombres
         ubicacion_archivo_institucional = archivo  # Guardar la ubicación del archivo institucional
+        wb = openpyxl.load_workbook(archivo)
+        sheet = wb.active
+
+        # Obtener los nombres capitalizados de la plantilla institucional
+        for row in sheet.iter_rows(min_row=2, min_col=1, max_col=1):
+            for cell in row:
+                nombres_institucional.append(cell.value.lower())
+
+        # Al cargar el archivo institucional, habilitar el botón "Transferir Calificaciones" y verificar las columnas
+        columnas_calificaciones_institucional = [cell.value for cell in sheet[1] if cell.value is not None]
         if not list(columnas_calificaciones_profesora) == list(columnas_calificaciones_institucional):
             mensaje_adicional = "Las siguientes columnas de calificaciones no coinciden con el Excel institucional:\n"
             columnas_no_coincidentes = set(columnas_calificaciones_profesora).difference(columnas_calificaciones_institucional)
@@ -74,6 +82,7 @@ def cargar_archivo_institucional():
             ventana_no_encontrados(mensaje_adicional, columnas_no_coincidentes)
         else:
             transferir_calificaciones_button["state"] = "normal"
+
 
 def ventana_no_encontrados(mensaje, columnas_no_coincidentes):
     def on_cierre():
@@ -106,8 +115,10 @@ def ventana_no_encontrados(mensaje, columnas_no_coincidentes):
     label = ttk.Label(ventana_emergente, text=mensaje, foreground="black", wraplength=380)
     label.pack(pady=20)
 
+
+
 def transferir_calificaciones():
-    global nombres_profesora, nombres_institucional, df_institucional, df_profesora, ubicacion_archivo_institucional
+    global nombres_profesora, nombres_institucional, ubicacion_archivo_institucional
 
     if not nombres_profesora or not nombres_institucional:
         messagebox.showerror("Error", "Primero cargue los archivos de la profesora y el institucional.")
@@ -119,41 +130,26 @@ def transferir_calificaciones():
         mensaje_adicional += f"- {', '.join(columnas_no_coincidentes)}\nPor favor, verifique los nombres de las columnas."
         ventana_no_encontrados(mensaje_adicional, columnas_no_coincidentes)
     else:
-        # Capitalizar los nombres en ambas listas
+        # Capitalizar los nombres en df_profesora
         df_profesora['Nombre'] = df_profesora['Nombre'].apply(capitalizar_nombre)
         nombres_profesora = [nombre.lower() for nombre in df_profesora['Nombre']]
 
-        # Capitalizar los nombres en df_institucional
-        df_institucional['Nombre'] = df_institucional['Nombre'].apply(capitalizar_nombre)
+        # Transferir calificaciones a la plantilla institucional
+        wb = openpyxl.load_workbook(ubicacion_archivo_institucional)
+        sheet = wb.active
 
-        # Agregar impresiones de diagnóstico
-        print("Nombres capitalizados en df_profesora:")
-        print(df_profesora.head())
-
-        # Crear un diccionario para mapear los nombres capitalizados de la profesora a los nombres capitalizados de df_institucional
-        mapeo_nombres = dict(zip(df_profesora['Nombre'], df_institucional['Nombre']))
-
-        # Agregar impresiones de diagnóstico
-        print("Mapeo de nombres:")
-        print(mapeo_nombres)
-
-        # Transferir calificaciones
         for columna in columnas_calificaciones_profesora:
-            for index, row in df_profesora.iterrows():
-                nombre_estudiante = row['Nombre']
-                calificacion = row[columna]
-                df_institucional.loc[df_institucional['Nombre'] == mapeo_nombres[nombre_estudiante], columna] = calificacion
+            for nombre_estudiante, calificacion in zip(df_profesora['Nombre'], df_profesora[columna]):
+                if nombre_estudiante.lower() in nombres_institucional:
+                    # Buscar la fila correspondiente al estudiante
+                    row_idx = nombres_institucional.index(nombre_estudiante.lower()) + 2  # +2 para tener en cuenta el encabezado
+                    cell = sheet.cell(row=row_idx, column=columnas_calificaciones_institucional.index(columna) + 1)  # +1 para ajustar índice
+                    cell.value = calificacion
 
-        # Agregar impresiones de diagnóstico
-        print("Después de actualizar df_institucional:")
-        print(df_institucional.head())
-
-        # Guardar el archivo actualizado en la ubicación del archivo institucional
-        if ubicacion_archivo_institucional:
-            df_institucional.to_excel(ubicacion_archivo_institucional, index=False)
-            mensaje_exitoso = "Las calificaciones han sido transferidas exitosamente."
-            messagebox.showinfo("Transferencia Exitosa", mensaje_exitoso)
-            deshabilitar_botones()
+        wb.save(ubicacion_archivo_institucional)
+        mensaje_exitoso = "Las calificaciones han sido transferidas exitosamente."
+        messagebox.showinfo("Transferencia Exitosa", mensaje_exitoso)
+        deshabilitar_botones()
 
 
 
